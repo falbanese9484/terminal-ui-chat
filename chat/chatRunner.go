@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 )
@@ -12,12 +11,14 @@ import (
 const ApiURL = "http://localhost:11434/api/generate"
 
 type ChatBus struct {
+	// This Bus is going to be used to feed messages to the TUI event loop
 	Done    chan bool
 	Content chan *ChatResponse
 	Error   chan error
 }
 
 type ChatRequest struct {
+	// Initial structure for the chat request.
 	Model   string `json:"model"`
 	Prompt  string `json:"prompt"`
 	Stream  bool   `json:"stream"`
@@ -25,6 +26,7 @@ type ChatRequest struct {
 }
 
 type ChatResponse struct {
+	// What we get back from the LLM Api
 	Response string `json:"response"`
 	Context  []int  `json:"context"`
 	Done     bool   `json:"done"`
@@ -38,11 +40,11 @@ func NewChatBus() *ChatBus {
 	}
 }
 
-func (cb *ChatBus) Start() {
+func (cb *ChatBus) Start(byteReader chan *ChatResponse) {
 	for {
 		select {
 		case response := <-cb.Content:
-			fmt.Printf("%s", response.Response)
+			byteReader <- response
 		case err := <-cb.Error:
 			log.Fatalf("%v", err)
 			return
@@ -65,6 +67,7 @@ func (cb *ChatBus) RunChat(request *ChatRequest) {
 		return
 	}
 	client := http.Client{}
+	req.Header.Add("Content-Type", "application/json")
 	res, err := client.Do(req)
 	if err != nil {
 		cb.Error <- err
