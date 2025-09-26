@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/falbanese9484/terminal-chat/chat"
 	"github.com/falbanese9484/terminal-chat/logger"
@@ -50,6 +51,7 @@ type model struct {
 	currentAIResponse string
 	logger            *logger.Logger
 	context           []int
+	renderer          *glamour.TermRenderer
 }
 
 func initialModel() model {
@@ -79,6 +81,10 @@ Type a message and press Enter to send.`)
 	}
 	bus := chat.NewChatBus(logger)
 	bReader := make(chan *chat.ChatResponse, 100)
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
 	go bus.Start(bReader)
 	return model{
 		textarea:    ta,
@@ -90,6 +96,7 @@ Type a message and press Enter to send.`)
 		ByteReader:  bReader,
 		logger:      logger,
 		context:     []int{},
+		renderer:    renderer,
 	}
 }
 
@@ -120,14 +127,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chatResponseMsg:
 		if msg.Response != "" {
 			m.currentAIResponse += msg.Response
-			allMessages := append(m.messages, m.senderStyle.Render("AI: ")+m.currentAIResponse)
+			renderedText, _ := m.renderer.Render(m.currentAIResponse)
+			allMessages := append(m.messages, m.senderStyle.Render("AI: ")+renderedText)
 			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(allMessages, "\n")))
 			m.viewport.GotoBottom()
 		}
 		if !msg.Done {
 			return m, waitForChatResponse(m.ByteReader)
 		} else {
-			m.messages = append(m.messages, m.senderStyle.Render("AI: ")+m.currentAIResponse)
+			renderedtext, _ := m.renderer.Render(m.currentAIResponse)
+			m.messages = append(m.messages, m.senderStyle.Render("AI: ")+renderedtext)
 			m.currentAIResponse = ""
 			m.context = msg.Context
 			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
