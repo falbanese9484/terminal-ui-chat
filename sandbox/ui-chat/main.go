@@ -8,11 +8,14 @@ import (
 	"log"
 	"strings"
 
+	_ "github.com/joho/godotenv/autoload"
+
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/falbanese9484/terminal-chat/chat"
+	"github.com/falbanese9484/terminal-chat/logger"
 )
 
 const gap = "\n\n"
@@ -45,6 +48,8 @@ type model struct {
 	ChatBus           *chat.ChatBus
 	ByteReader        chan *chat.ChatResponse
 	currentAIResponse string
+	logger            *logger.Logger
+	context           []int
 }
 
 func initialModel() model {
@@ -68,7 +73,11 @@ func initialModel() model {
 Type a message and press Enter to send.`)
 
 	ta.KeyMap.InsertNewline.SetEnabled(false)
-	bus := chat.NewChatBus()
+	logger, err := logger.NewSafeLogger(true)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	bus := chat.NewChatBus(logger)
 	bReader := make(chan *chat.ChatResponse, 100)
 	go bus.Start(bReader)
 	return model{
@@ -79,6 +88,8 @@ Type a message and press Enter to send.`)
 		err:         nil,
 		ChatBus:     bus,
 		ByteReader:  bReader,
+		logger:      logger,
+		context:     []int{},
 	}
 }
 
@@ -109,15 +120,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chatResponseMsg:
 		if msg.Response != "" {
 			m.currentAIResponse += msg.Response
-			allMessages := append(m.messages, "AI: "+m.currentAIResponse)
+			allMessages := append(m.messages, m.senderStyle.Render("AI: ")+m.currentAIResponse)
 			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(allMessages, "\n")))
 			m.viewport.GotoBottom()
 		}
 		if !msg.Done {
 			return m, waitForChatResponse(m.ByteReader)
 		} else {
-			m.messages = append(m.messages, "AI: "+m.currentAIResponse)
+			m.messages = append(m.messages, m.senderStyle.Render("AI: ")+m.currentAIResponse)
 			m.currentAIResponse = ""
+			m.context = msg.Context
+			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+			m.viewport.GotoBottom()
 		}
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -131,9 +145,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Reset()
 			m.viewport.GotoBottom()
 			request := chat.ChatRequest{
-				Model:  "llama3.2",
-				Prompt: prompt,
-				Stream: true,
+				Model:   "llama3.2",
+				Prompt:  prompt,
+				Stream:  true,
+				Context: m.context,
 			}
 			go m.ChatBus.RunChat(&request)
 			return m, waitForChatResponse(m.ByteReader)

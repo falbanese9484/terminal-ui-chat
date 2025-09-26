@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/falbanese9484/terminal-chat/logger"
 )
 
 const ApiURL = "http://localhost:11434/api/generate"
@@ -15,6 +18,8 @@ type ChatBus struct {
 	Done    chan bool
 	Content chan *ChatResponse
 	Error   chan error
+	Context []int
+	logger  *logger.Logger
 }
 
 type ChatRequest struct {
@@ -32,11 +37,12 @@ type ChatResponse struct {
 	Done     bool   `json:"done"`
 }
 
-func NewChatBus() *ChatBus {
+func NewChatBus(logger *logger.Logger) *ChatBus {
 	return &ChatBus{
 		Done:    make(chan bool),
 		Content: make(chan *ChatResponse),
 		Error:   make(chan error),
+		logger:  logger,
 	}
 }
 
@@ -49,13 +55,14 @@ func (cb *ChatBus) Start(byteReader chan *ChatResponse) {
 			log.Fatalf("%v", err)
 			return
 		case <-cb.Done:
-			return
+			byteReader <- &ChatResponse{Done: true, Context: cb.Context}
 		}
 	}
 }
 
 func (cb *ChatBus) RunChat(request *ChatRequest) {
 	data, err := json.Marshal(request)
+	cb.logger.Debug(fmt.Sprintf("%v", request))
 	if err != nil {
 		cb.Error <- err
 		return
@@ -87,6 +94,7 @@ func (cb *ChatBus) RunChat(request *ChatRequest) {
 		}
 
 		if chunk.Done {
+			cb.Context = chunk.Context
 			cb.Done <- true
 			return
 		}
