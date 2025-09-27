@@ -83,7 +83,7 @@ Type a message and press Enter to send.`)
 	bReader := make(chan *chat.ChatResponse, 100)
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
+		glamour.WithWordWrap(200),
 	)
 	go bus.Start(bReader)
 	return model{
@@ -104,6 +104,17 @@ func (m model) Init() tea.Cmd {
 	return textarea.Blink
 }
 
+func setAIResponse(m *model, msg *chat.ChatResponse) {
+	m.currentAIResponse += msg.Response
+	renderedText, _ := m.renderer.Render(m.currentAIResponse)
+	allMessages := append(m.messages, m.senderStyle.Render("AI: ")+renderedText)
+	m.viewport.SetContent(
+		lipgloss.NewStyle().Width(
+			m.viewport.Width).Render(
+			strings.Join(allMessages, "\n")))
+	m.viewport.GotoBottom()
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		tiCmd tea.Cmd
@@ -121,16 +132,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if len(m.messages) > 0 {
 			// Wrap content before setting it.
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+			m.viewport.SetContent(
+				lipgloss.NewStyle().Width(
+					m.viewport.Width).Render(
+					strings.Join(m.messages, "\n")))
 		}
 		m.viewport.GotoBottom()
 	case chatResponseMsg:
 		if msg.Response != "" {
-			m.currentAIResponse += msg.Response
-			renderedText, _ := m.renderer.Render(m.currentAIResponse)
-			allMessages := append(m.messages, m.senderStyle.Render("AI: ")+renderedText)
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(allMessages, "\n")))
-			m.viewport.GotoBottom()
+			setAIResponse(&m, msg)
 		}
 		if !msg.Done {
 			return m, waitForChatResponse(m.ByteReader)
@@ -139,7 +149,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, m.senderStyle.Render("AI: ")+renderedtext)
 			m.currentAIResponse = ""
 			m.context = msg.Context
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+			m.viewport.SetContent(lipgloss.NewStyle().Width(
+				m.viewport.Width).Render(
+				strings.Join(m.messages, "\n")))
 			m.viewport.GotoBottom()
 		}
 	case tea.KeyMsg:
@@ -150,7 +162,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			prompt := m.textarea.Value()
 			m.messages = append(m.messages, m.senderStyle.Render("You: ")+prompt)
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+			m.viewport.SetContent(
+				lipgloss.NewStyle().Width(
+					m.viewport.Width).Render(
+					strings.Join(m.messages, "\n")))
 			m.textarea.Reset()
 			m.viewport.GotoBottom()
 			request := chat.ChatRequest{
@@ -163,7 +178,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, waitForChatResponse(m.ByteReader)
 		}
 
-	// We handle errors just like any other message
 	case errMsg:
 		m.err = msg
 		return m, nil
