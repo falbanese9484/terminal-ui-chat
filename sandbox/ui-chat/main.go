@@ -17,12 +17,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/falbanese9484/terminal-chat/chat"
 	"github.com/falbanese9484/terminal-chat/logger"
+	"github.com/falbanese9484/terminal-chat/providers/models"
+	"github.com/falbanese9484/terminal-chat/types"
 )
 
 const gap = "\n\n"
 
 func main() {
-	p := tea.NewProgram(initialModel())
+	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
@@ -31,10 +33,10 @@ func main() {
 
 type (
 	errMsg          error
-	chatResponseMsg *chat.ChatResponse
+	chatResponseMsg *types.ChatResponse
 )
 
-func waitForChatResponse(sub chan *chat.ChatResponse) tea.Cmd {
+func waitForChatResponse(sub chan *types.ChatResponse) tea.Cmd {
 	return func() tea.Msg {
 		return chatResponseMsg(<-sub)
 	}
@@ -47,10 +49,10 @@ type model struct {
 	senderStyle       lipgloss.Style
 	err               error
 	ChatBus           *chat.ChatBus
-	ByteReader        chan *chat.ChatResponse
+	ByteReader        chan *types.ChatResponse
 	currentAIResponse string
+	modelProvider     *types.ProviderService
 	logger            *logger.Logger
-	context           []int
 	renderer          *glamour.TermRenderer
 }
 
@@ -79,24 +81,26 @@ Type a message and press Enter to send.`)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
-	bus := chat.NewChatBus(logger)
-	bReader := make(chan *chat.ChatResponse, 100)
+	ollama := models.NewOllamaProvider(logger)
+	modelProvider := types.NewProviderService(ollama)
+	bus := chat.NewChatBus(logger, modelProvider)
+	bReader := make(chan *types.ChatResponse, 100)
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(200),
 	)
 	go bus.Start(bReader)
 	return model{
-		textarea:    ta,
-		messages:    []string{},
-		viewport:    vp,
-		senderStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-		err:         nil,
-		ChatBus:     bus,
-		ByteReader:  bReader,
-		logger:      logger,
-		context:     []int{},
-		renderer:    renderer,
+		textarea:      ta,
+		messages:      []string{},
+		viewport:      vp,
+		senderStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+		err:           nil,
+		ChatBus:       bus,
+		ByteReader:    bReader,
+		logger:        logger,
+		renderer:      renderer,
+		modelProvider: modelProvider,
 	}
 }
 
@@ -104,7 +108,7 @@ func (m model) Init() tea.Cmd {
 	return textarea.Blink
 }
 
-func setAIResponse(m *model, msg *chat.ChatResponse) {
+func setAIResponse(m *model, msg *types.ChatResponse) {
 	m.currentAIResponse += msg.Response
 	renderedText, _ := m.renderer.Render(m.currentAIResponse)
 	allMessages := append(m.messages, m.senderStyle.Render("AI: ")+renderedText)
@@ -148,7 +152,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			renderedtext, _ := m.renderer.Render(m.currentAIResponse)
 			m.messages = append(m.messages, m.senderStyle.Render("AI: ")+renderedtext)
 			m.currentAIResponse = ""
-			m.context = msg.Context
 			m.viewport.SetContent(lipgloss.NewStyle().Width(
 				m.viewport.Width).Render(
 				strings.Join(m.messages, "\n")))
@@ -168,13 +171,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					strings.Join(m.messages, "\n")))
 			m.textarea.Reset()
 			m.viewport.GotoBottom()
-			request := chat.ChatRequest{
-				Model:   "llama3.2",
-				Prompt:  prompt,
-				Stream:  true,
-				Context: m.context,
-			}
-			go m.ChatBus.RunChat(&request)
+			request := m.modelProvider.GenerateRequest(prompt)
+			go m.ChatBus.RunChat(request)
 			return m, waitForChatResponse(m.ByteReader)
 		}
 
