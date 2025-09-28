@@ -18,6 +18,7 @@ type ProviderService struct {
 	modelProvider Provider
 }
 
+// NewProviderService creates a ProviderService that uses the given Provider as its modelProvider.
 func NewProviderService(mp Provider) *ProviderService {
 	return &ProviderService{
 		modelProvider: mp,

@@ -24,6 +24,8 @@ import (
 
 const gap = "\n\n"
 
+// main starts and runs the Bubble Tea-based chat TUI.
+// It creates a program with the initial model using the alternate screen and logs a fatal error if the program fails to run.
 func main() {
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 
@@ -37,6 +39,7 @@ type (
 	chatResponseMsg *types.ChatResponse
 )
 
+// containing "chat stream closed".
 func waitForChatResponse(sub chan *types.ChatResponse) tea.Cmd {
 	return func() tea.Msg {
 		msg, ok := <-sub
@@ -63,6 +66,7 @@ type model struct {
 	renderer          *glamour.TermRenderer
 }
 
+// initialModel creates and returns a fully initialized model configured with a textarea and viewport, styled user and AI label styles, a provider-backed ChatBus with a buffered response channel, a glamour renderer, and a safe logger, and it starts the chat bus goroutine.
 func initialModel() model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
@@ -125,12 +129,15 @@ func (m model) Init() tea.Cmd {
 	return textarea.Blink
 }
 
+// formatMessage creates a message string prefixed with a timestamped, styled sender label.
+// The returned string has the styled "[HH:MM] sender:" prefix followed by a space and the provided content.
 func formatMessage(sender, content string, style lipgloss.Style) string {
 	timestamp := time.Now().Format("15:04")
 	prefix := style.Render(fmt.Sprintf("[%s] %s:", timestamp, sender))
 	return prefix + " " + content
 }
 
+// and scrolls the viewport to the bottom.
 func setAIResponse(m *model, msg *types.ChatResponse) {
 	m.currentAIResponse += msg.Response
 	renderedText, _ := m.renderer.Render(m.currentAIResponse)
