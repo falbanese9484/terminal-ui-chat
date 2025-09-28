@@ -20,6 +20,8 @@ type OllamaProvider struct {
 	context []int
 }
 
+// NewOllamaProvider creates a new OllamaProvider configured to use ApiURL.
+// The provided logger is attached and the internal context is initialized as an empty slice.
 func NewOllamaProvider(logger *logger.Logger) *OllamaProvider {
 	return &OllamaProvider{
 		Url:     ApiURL,

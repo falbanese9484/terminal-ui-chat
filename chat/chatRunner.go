@@ -17,16 +17,9 @@ type ChatBus struct {
 	logger        *logger.Logger
 }
 
-/*
-I need to start thinking about how I'm going to control different Model specs. I know that that
-opencode uses a model registry to give users selection.
-
-My system will most likely be largely based on OpenRouter, with an option to use local models.
-
-TODO: Create Provider Interface that will:
-1. Generate a Chat Request to send to the Provider
-2. Deserialize the Response into a Chat Response
-*/
+// NewChatBus creates and returns a ChatBus with initialized channels for Done, Content, and Error,
+// and assigns the provided logger and model provider.
+// The channels are unbuffered.
 
 func NewChatBus(logger *logger.Logger, mp *types.ProviderService) *ChatBus {
 	return &ChatBus{
