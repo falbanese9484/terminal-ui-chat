@@ -1,61 +1,37 @@
 package chat
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"net/http"
+	"context"
 
 	"github.com/falbanese9484/terminal-chat/logger"
+	"github.com/falbanese9484/terminal-chat/types"
 )
-
-const ApiURL = "http://localhost:11434/api/generate"
 
 type ChatBus struct {
 	// This Bus is going to be used to feed messages to the TUI event loop
 	Done    chan bool
-	Content chan *ChatResponse
+	Content chan *types.ChatResponse
 	// NOTE: ChatResponse will need to be able to take in different response specs.
-	Error   chan error
-	Context []int
-	logger  *logger.Logger
+	Error         chan error
+	modelProvider *types.ProviderService
+	logger        *logger.Logger
 }
 
-/*
-I need to start thinking about how I'm going to control different Model specs. I know that that
-opencode uses a model registry to give users selection.
+// NewChatBus creates and returns a ChatBus with initialized channels for Done, Content, and Error,
+// and assigns the provided logger and model provider.
+// The channels are unbuffered.
 
-My system will most likely be largely based on OpenRouter, with an option to use local models.
-
-TODO: Data Model How models will be organized and selectable. Struct Layer / Interface
-*/
-
-type ChatRequest struct {
-	// Initial structure for the chat request.
-	Model   string `json:"model"`
-	Prompt  string `json:"prompt"`
-	Stream  bool   `json:"stream"`
-	Context []int  `json:"context,omitempty"`
-}
-
-type ChatResponse struct {
-	// What we get back from the LLM Api
-	Response string `json:"response"`
-	Context  []int  `json:"context"`
-	Done     bool   `json:"done"`
-}
-
-func NewChatBus(logger *logger.Logger) *ChatBus {
+func NewChatBus(logger *logger.Logger, mp *types.ProviderService) *ChatBus {
 	return &ChatBus{
-		Done:    make(chan bool),
-		Content: make(chan *ChatResponse),
-		Error:   make(chan error),
-		logger:  logger,
+		Done:          make(chan bool),
+		Content:       make(chan *types.ChatResponse),
+		Error:         make(chan error),
+		modelProvider: mp,
+		logger:        logger,
 	}
 }
 
-func (cb *ChatBus) Start(byteReader chan *ChatResponse) {
+func (cb *ChatBus) Start(byteReader chan *types.ChatResponse) {
 	for {
 		select {
 		case response := <-cb.Content:
@@ -64,48 +40,12 @@ func (cb *ChatBus) Start(byteReader chan *ChatResponse) {
 			cb.logger.Error("failed to read incoming chat response", "error", err)
 			return
 		case <-cb.Done:
-			byteReader <- &ChatResponse{Done: true, Context: cb.Context}
+			byteReader <- &types.ChatResponse{Done: true}
 		}
 	}
 }
 
-func (cb *ChatBus) RunChat(request *ChatRequest) {
-	data, err := json.Marshal(request)
-	cb.logger.Debug(fmt.Sprintf("%v", request))
-	if err != nil {
-		cb.Error <- err
-		return
-	}
-	dataReader := bytes.NewReader(data)
-	req, err := http.NewRequest("POST", ApiURL, dataReader)
-	if err != nil {
-		cb.Error <- err
-		return
-	}
-	client := http.Client{}
-	req.Header.Add("Content-Type", "application/json")
-	res, err := client.Do(req)
-	if err != nil {
-		cb.Error <- err
-		return
-	}
-	defer res.Body.Close()
-	scanner := bufio.NewScanner(res.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		var chunk ChatResponse
-		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
-			continue
-		}
-
-		if chunk.Response != "" {
-			cb.Content <- &chunk
-		}
-
-		if chunk.Done {
-			cb.Context = chunk.Context
-			cb.Done <- true
-			return
-		}
-	}
+func (cb *ChatBus) RunChat(request *types.ChatRequest) {
+	ctx := context.Background()
+	cb.modelProvider.Chat(ctx, request, cb.Content, cb.Error, cb.Done)
 }

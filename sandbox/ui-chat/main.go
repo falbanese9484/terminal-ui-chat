@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 
@@ -17,12 +18,16 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/falbanese9484/terminal-chat/chat"
 	"github.com/falbanese9484/terminal-chat/logger"
+	"github.com/falbanese9484/terminal-chat/providers/models"
+	"github.com/falbanese9484/terminal-chat/types"
 )
 
 const gap = "\n\n"
 
+// main starts and runs the Bubble Tea-based chat TUI.
+// It creates a program with the initial model using the alternate screen and logs a fatal error if the program fails to run.
 func main() {
-	p := tea.NewProgram(initialModel())
+	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
@@ -31,12 +36,17 @@ func main() {
 
 type (
 	errMsg          error
-	chatResponseMsg *chat.ChatResponse
+	chatResponseMsg *types.ChatResponse
 )
 
-func waitForChatResponse(sub chan *chat.ChatResponse) tea.Cmd {
+// containing "chat stream closed".
+func waitForChatResponse(sub chan *types.ChatResponse) tea.Cmd {
 	return func() tea.Msg {
-		return chatResponseMsg(<-sub)
+		msg, ok := <-sub
+		if !ok {
+			return errMsg(fmt.Errorf("chat stream closed"))
+		}
+		return chatResponseMsg(msg)
 	}
 }
 
@@ -45,15 +55,18 @@ type model struct {
 	messages          []string
 	textarea          textarea.Model
 	senderStyle       lipgloss.Style
+	userStyle         lipgloss.Style
+	aiStyle           lipgloss.Style
 	err               error
 	ChatBus           *chat.ChatBus
-	ByteReader        chan *chat.ChatResponse
+	ByteReader        chan *types.ChatResponse
 	currentAIResponse string
+	modelProvider     *types.ProviderService
 	logger            *logger.Logger
-	context           []int
 	renderer          *glamour.TermRenderer
 }
 
+// initialModel creates and returns a fully initialized model configured with a textarea and viewport, styled user and AI label styles, a provider-backed ChatBus with a buffered response channel, a glamour renderer, and a safe logger, and it starts the chat bus goroutine.
 func initialModel() model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
@@ -65,7 +78,15 @@ func initialModel() model {
 	ta.SetWidth(30)
 	ta.SetHeight(3)
 
-	// Remove cursor line styling
+	userStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("10")). // Bright green
+		Bold(true).
+		Padding(0, 1)
+
+	aiStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("12")). // Bright blue
+		Bold(true).
+		Padding(0, 1)
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
 
 	ta.ShowLineNumbers = false
@@ -79,24 +100,28 @@ Type a message and press Enter to send.`)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
-	bus := chat.NewChatBus(logger)
-	bReader := make(chan *chat.ChatResponse, 100)
+	ollama := models.NewOllamaProvider(logger)
+	modelProvider := types.NewProviderService(ollama)
+	bus := chat.NewChatBus(logger, modelProvider)
+	bReader := make(chan *types.ChatResponse, 100)
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(200),
+		glamour.WithWordWrap(80),
 	)
 	go bus.Start(bReader)
 	return model{
-		textarea:    ta,
-		messages:    []string{},
-		viewport:    vp,
-		senderStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-		err:         nil,
-		ChatBus:     bus,
-		ByteReader:  bReader,
-		logger:      logger,
-		context:     []int{},
-		renderer:    renderer,
+		textarea:      ta,
+		messages:      []string{},
+		viewport:      vp,
+		senderStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+		err:           nil,
+		ChatBus:       bus,
+		userStyle:     userStyle,
+		aiStyle:       aiStyle,
+		ByteReader:    bReader,
+		logger:        logger,
+		renderer:      renderer,
+		modelProvider: modelProvider,
 	}
 }
 
@@ -104,10 +129,19 @@ func (m model) Init() tea.Cmd {
 	return textarea.Blink
 }
 
-func setAIResponse(m *model, msg *chat.ChatResponse) {
+// formatMessage creates a message string prefixed with a timestamped, styled sender label.
+// The returned string has the styled "[HH:MM] sender:" prefix followed by a space and the provided content.
+func formatMessage(sender, content string, style lipgloss.Style) string {
+	timestamp := time.Now().Format("15:04")
+	prefix := style.Render(fmt.Sprintf("[%s] %s:", timestamp, sender))
+	return prefix + " " + content
+}
+
+// and scrolls the viewport to the bottom.
+func setAIResponse(m *model, msg *types.ChatResponse) {
 	m.currentAIResponse += msg.Response
 	renderedText, _ := m.renderer.Render(m.currentAIResponse)
-	allMessages := append(m.messages, m.senderStyle.Render("AI: ")+renderedText)
+	allMessages := append(m.messages, formatMessage("Ollama", renderedText, m.aiStyle))
 	m.viewport.SetContent(
 		lipgloss.NewStyle().Width(
 			m.viewport.Width).Render(
@@ -139,6 +173,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.viewport.GotoBottom()
 	case chatResponseMsg:
+		if msg == nil {
+			// Channel closed without a final message.
+			return m, nil
+		}
 		if msg.Response != "" {
 			setAIResponse(&m, msg)
 		}
@@ -146,9 +184,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, waitForChatResponse(m.ByteReader)
 		} else {
 			renderedtext, _ := m.renderer.Render(m.currentAIResponse)
-			m.messages = append(m.messages, m.senderStyle.Render("AI: ")+renderedtext)
+			m.messages = append(m.messages, formatMessage("Ollama", renderedtext, m.aiStyle))
 			m.currentAIResponse = ""
-			m.context = msg.Context
 			m.viewport.SetContent(lipgloss.NewStyle().Width(
 				m.viewport.Width).Render(
 				strings.Join(m.messages, "\n")))
@@ -161,20 +198,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case tea.KeyEnter:
 			prompt := m.textarea.Value()
-			m.messages = append(m.messages, m.senderStyle.Render("You: ")+prompt)
+			m.messages = append(m.messages, m.userStyle.Render("You: ")+prompt)
 			m.viewport.SetContent(
 				lipgloss.NewStyle().Width(
 					m.viewport.Width).Render(
 					strings.Join(m.messages, "\n")))
 			m.textarea.Reset()
 			m.viewport.GotoBottom()
-			request := chat.ChatRequest{
-				Model:   "llama3.2",
-				Prompt:  prompt,
-				Stream:  true,
-				Context: m.context,
-			}
-			go m.ChatBus.RunChat(&request)
+			request := m.modelProvider.GenerateRequest(prompt)
+			go m.ChatBus.RunChat(request)
 			return m, waitForChatResponse(m.ByteReader)
 		}
 
