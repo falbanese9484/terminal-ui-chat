@@ -7,8 +7,6 @@ import (
 	"github.com/falbanese9484/terminal-chat/types"
 )
 
-const ApiURL = "http://localhost:11434/api/generate"
-
 type ChatBus struct {
 	// This Bus is going to be used to feed messages to the TUI event loop
 	Done    chan bool

@@ -11,6 +11,6 @@ type ChatRequest struct {
 type ChatResponse struct {
 	// What we get back from the LLM Api
 	Response string `json:"response"`
-	Context  []int  `json:"context"`
+	Context  []int  `json:"context,omitempty"`
 	Done     bool   `json:"done"`
 }

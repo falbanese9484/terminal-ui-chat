@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 
@@ -38,7 +39,11 @@ type (
 
 func waitForChatResponse(sub chan *types.ChatResponse) tea.Cmd {
 	return func() tea.Msg {
-		return chatResponseMsg(<-sub)
+		msg, ok := <-sub
+		if !ok {
+			return errMsg(fmt.Errorf("chat stream closed"))
+		}
+		return chatResponseMsg(msg)
 	}
 }
 
@@ -47,6 +52,8 @@ type model struct {
 	messages          []string
 	textarea          textarea.Model
 	senderStyle       lipgloss.Style
+	userStyle         lipgloss.Style
+	aiStyle           lipgloss.Style
 	err               error
 	ChatBus           *chat.ChatBus
 	ByteReader        chan *types.ChatResponse
@@ -67,7 +74,15 @@ func initialModel() model {
 	ta.SetWidth(30)
 	ta.SetHeight(3)
 
-	// Remove cursor line styling
+	userStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("10")). // Bright green
+		Bold(true).
+		Padding(0, 1)
+
+	aiStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("12")). // Bright blue
+		Bold(true).
+		Padding(0, 1)
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
 
 	ta.ShowLineNumbers = false
@@ -87,7 +102,7 @@ Type a message and press Enter to send.`)
 	bReader := make(chan *types.ChatResponse, 100)
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(200),
+		glamour.WithWordWrap(80),
 	)
 	go bus.Start(bReader)
 	return model{
@@ -97,6 +112,8 @@ Type a message and press Enter to send.`)
 		senderStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 		err:           nil,
 		ChatBus:       bus,
+		userStyle:     userStyle,
+		aiStyle:       aiStyle,
 		ByteReader:    bReader,
 		logger:        logger,
 		renderer:      renderer,
@@ -108,10 +125,16 @@ func (m model) Init() tea.Cmd {
 	return textarea.Blink
 }
 
+func formatMessage(sender, content string, style lipgloss.Style) string {
+	timestamp := time.Now().Format("15:04")
+	prefix := style.Render(fmt.Sprintf("[%s] %s:", timestamp, sender))
+	return prefix + " " + content
+}
+
 func setAIResponse(m *model, msg *types.ChatResponse) {
 	m.currentAIResponse += msg.Response
 	renderedText, _ := m.renderer.Render(m.currentAIResponse)
-	allMessages := append(m.messages, m.senderStyle.Render("AI: ")+renderedText)
+	allMessages := append(m.messages, formatMessage("Ollama", renderedText, m.aiStyle))
 	m.viewport.SetContent(
 		lipgloss.NewStyle().Width(
 			m.viewport.Width).Render(
@@ -143,6 +166,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.viewport.GotoBottom()
 	case chatResponseMsg:
+		if msg == nil {
+			// Channel closed without a final message.
+			return m, nil
+		}
 		if msg.Response != "" {
 			setAIResponse(&m, msg)
 		}
@@ -150,7 +177,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, waitForChatResponse(m.ByteReader)
 		} else {
 			renderedtext, _ := m.renderer.Render(m.currentAIResponse)
-			m.messages = append(m.messages, m.senderStyle.Render("AI: ")+renderedtext)
+			m.messages = append(m.messages, formatMessage("Ollama", renderedtext, m.aiStyle))
 			m.currentAIResponse = ""
 			m.viewport.SetContent(lipgloss.NewStyle().Width(
 				m.viewport.Width).Render(
@@ -164,7 +191,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case tea.KeyEnter:
 			prompt := m.textarea.Value()
-			m.messages = append(m.messages, m.senderStyle.Render("You: ")+prompt)
+			m.messages = append(m.messages, m.userStyle.Render("You: ")+prompt)
 			m.viewport.SetContent(
 				lipgloss.NewStyle().Width(
 					m.viewport.Width).Render(

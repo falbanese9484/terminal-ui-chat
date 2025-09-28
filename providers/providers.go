@@ -16,3 +16,6 @@ package providers
 //) {
 //	ps.modelProvider.Chat(ctx, request, responseChannel, errorChannel, doneChannel)
 //}
+
+// NOTE: ProviderService was moved to package types. This package should contain
+// concrete provider implementations only (e.g., providers/models/...).

@@ -51,7 +51,7 @@ func (op *OllamaProvider) Chat(ctx context.Context,
 		return
 	}
 	dataReader := bytes.NewReader(data)
-	req, err := http.NewRequest("POST", op.Url, dataReader)
+	req, err := http.NewRequestWithContext(ctx, "POST", op.Url, dataReader)
 	if err != nil {
 		errorChannel <- err
 		return
