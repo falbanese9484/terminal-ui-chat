@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -27,7 +28,14 @@ const gap = "\n\n"
 // main starts and runs the Bubble Tea-based chat TUI.
 // It creates a program with the initial model using the alternate screen and logs a fatal error if the program fails to run.
 func main() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+	args := os.Args
+	var model string
+	if len(args) > 1 {
+		model = args[1]
+	} else {
+		model = "llama3.2"
+	}
+	p := tea.NewProgram(initialModel(model), tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
@@ -67,7 +75,7 @@ type model struct {
 }
 
 // initialModel creates and returns a fully initialized model configured with a textarea and viewport, styled user and AI label styles, a provider-backed ChatBus with a buffered response channel, a glamour renderer, and a safe logger, and it starts the chat bus goroutine.
-func initialModel() model {
+func initialModel(m string) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
 	ta.Focus()
@@ -100,7 +108,7 @@ Type a message and press Enter to send.`)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
-	ollama := models.NewOllamaProvider(logger)
+	ollama := models.NewOllamaProvider(logger, m)
 	modelProvider := types.NewProviderService(ollama)
 	bus := chat.NewChatBus(logger, modelProvider)
 	bReader := make(chan *types.ChatResponse, 100)

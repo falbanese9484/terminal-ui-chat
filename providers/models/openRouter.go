@@ -1,3 +1,3 @@
 package models
 
-type OpenRoute struct{}
+type OpenRouter struct{}
