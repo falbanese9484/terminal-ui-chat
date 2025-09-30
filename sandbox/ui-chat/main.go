@@ -21,6 +21,7 @@ import (
 	"github.com/falbanese9484/terminal-chat/logger"
 	"github.com/falbanese9484/terminal-chat/providers/models"
 	"github.com/falbanese9484/terminal-chat/types"
+	"github.com/falbanese9484/terminal-chat/ui"
 )
 
 const gap = "\n\n"
@@ -94,20 +95,26 @@ func initialModel(m string) model {
 
 	userStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("10")). // Bright green
-		Bold(true).
-		Padding(0, 1)
-
+		Bold(true)
 	aiStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("12")). // Bright blue
-		Bold(true).
-		Padding(0, 1)
+		Bold(true)
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
 
 	ta.ShowLineNumbers = false
 
+	connectedToStyle := lipgloss.NewStyle().Italic(true).
+		Foreground(lipgloss.Color("241")) // Gray color for "Connected
+	aiConnectedToStyle := connectedToStyle.Foreground(lipgloss.Color("75")) // Lighter blue for AI model name
+	logoStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("75")). // Bright blue
+		Bold(true)
 	vp := viewport.New(30, 5)
-	vp.SetContent(`Welcome to the chat room!
-Type a message and press Enter to send.`)
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Padding(2)
+	vp.SetContent(logoStyle.Render(ui.LOGO) + titleStyle.Render(ui.PHRASE) + "\n" + connectedToStyle.Render("Connected to: ") + aiConnectedToStyle.Render(m) + "\n\n")
+	// Disable newlines in the textarea to handle input on Enter keypress
 
 	ta.KeyMap.InsertNewline.SetEnabled(false)
 	logger, err := logger.NewSafeLogger(true)
