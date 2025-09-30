@@ -13,4 +13,3 @@ const (
 
 	PHRASE = `AI for terminally ill`
 )
-
