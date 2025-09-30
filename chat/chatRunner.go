@@ -35,11 +35,13 @@ func (cb *ChatBus) Start(byteReader chan *types.ChatResponse) {
 	for {
 		select {
 		case response := <-cb.Content:
+			cb.logger.Debug("streaming", "bytes", len(cb.Content))
 			byteReader <- response
 		case err := <-cb.Error:
 			cb.logger.Error("failed to read incoming chat response", "error", err)
 			return
 		case <-cb.Done:
+			cb.logger.Info("message complete - signalling done")
 			byteReader <- &types.ChatResponse{Done: true}
 		}
 	}
@@ -47,5 +49,5 @@ func (cb *ChatBus) Start(byteReader chan *types.ChatResponse) {
 
 func (cb *ChatBus) RunChat(request *types.ChatRequest) {
 	ctx := context.Background()
-	cb.modelProvider.Chat(ctx, request, cb.Content, cb.Error, cb.Done)
+	cb.modelProvider.Chat(&types.BusConnector{Ctx: ctx, Request: request, ResponseChan: cb.Content, ErrorChan: cb.Error, DoneChannel: cb.Done})
 }
