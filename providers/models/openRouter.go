@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/falbanese9484/terminal-chat/logger"
 	"github.com/falbanese9484/terminal-chat/types"
@@ -90,6 +91,7 @@ func (or *OpenRouter) Chat(conn *types.BusConnector) {
 		conn.ErrorChan <- err
 		return
 	}
+	var assistantResponse strings.Builder
 	client := http.Client{}
 	hReq.Header.Add("Content-Type", "application/json")
 	hReq.Header.Add("Authorization", fmt.Sprintf("Bearer %s", or.ApiKey))
@@ -99,12 +101,24 @@ func (or *OpenRouter) Chat(conn *types.BusConnector) {
 		return
 	}
 	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		conn.ErrorChan <- fmt.Errorf("OpenRouter API returned status %d", res.StatusCode)
+		return
+	}
+	or.Context = append(or.Context, OpenRouterMessage{
+		Role:    "user",
+		Content: conn.Request.Prompt,
+	})
 	scanner := bufio.NewScanner(res.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if len(line) > 6 && line[:6] == "data: " {
 			data := line[6:]
 			if data == "[DONE]" {
+				or.Context = append(or.Context, OpenRouterMessage{
+					Role:    "assistant",
+					Content: assistantResponse.String(),
+				})
 				conn.DoneChannel <- true
 				return
 			}
@@ -113,9 +127,18 @@ func (or *OpenRouter) Chat(conn *types.BusConnector) {
 				conn.ErrorChan <- err
 				return
 			}
+			if len(response.Choices) == 0 {
+				conn.DoneChannel <- true
+				return
+			}
 			textResponse := response.Choices[0].Delta.Content
+			assistantResponse.WriteString(textResponse)
 			returnRes := &types.ChatResponse{Response: textResponse}
 			conn.ResponseChan <- returnRes
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		conn.ErrorChan <- err
+		return
 	}
 }
