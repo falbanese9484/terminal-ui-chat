@@ -15,3 +15,9 @@ go run ./sandbox/ui-chat/main.go
 ```
 
 The chat supports markdown using charmbracelets glamour library.
+
+### Current Ideas for Steps Forward
+1. Configure OpenRouter
+2. Selectable Models
+3. Tooling
+4. Persistant Sessions / Storage / Recall

@@ -1,16 +1,10 @@
 package types
 
-import (
-	"context"
-)
-
 type Provider interface {
 	// Provider Takes the universal Chat Request, along with reponseChannel and errorChannel
 	// from the Chat Bus. This way each Provider can handle the serializing, deserializing
 	// and streaming that may be provider specific.
-	Chat(ctx context.Context, request *ChatRequest,
-		responseChannel chan *ChatResponse,
-		errorChannel chan error, doneChannel chan bool)
+	Chat(c *BusConnector)
 	GenerateRequest(prompt string) *ChatRequest
 }
 
@@ -25,11 +19,8 @@ func NewProviderService(mp Provider) *ProviderService {
 	}
 }
 
-func (ps *ProviderService) Chat(ctx context.Context, request *ChatRequest,
-	responseChannel chan *ChatResponse,
-	errorChannel chan error, doneChannel chan bool,
-) {
-	ps.modelProvider.Chat(ctx, request, responseChannel, errorChannel, doneChannel)
+func (ps *ProviderService) Chat(c *BusConnector) {
+	ps.modelProvider.Chat(c)
 }
 
 func (ps *ProviderService) GenerateRequest(prompt string) *ChatRequest {

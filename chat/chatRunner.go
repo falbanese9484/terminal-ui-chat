@@ -47,5 +47,5 @@ func (cb *ChatBus) Start(byteReader chan *types.ChatResponse) {
 
 func (cb *ChatBus) RunChat(request *types.ChatRequest) {
 	ctx := context.Background()
-	cb.modelProvider.Chat(ctx, request, cb.Content, cb.Error, cb.Done)
+	cb.modelProvider.Chat(&types.BusConnector{Ctx: ctx, Request: request, ResponseChan: cb.Content, ErrorChan: cb.Error, DoneChannel: cb.Done})
 }
