@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/falbanese9484/terminal-chat/logger"
 	"github.com/falbanese9484/terminal-chat/types"
@@ -84,11 +85,11 @@ type OpenRouterStreamResponse struct {
 	} `json:"choices"`
 }
 
-func (or *OpenRouter) buildScanner(conn *types.BusConnector) (*http.Response, error) {
+func (or *OpenRouter) buildScanner(conn *types.BusConnector, msgs []OpenRouterMessage) (*http.Response, error) {
 	// Builds the *bufio.Scanner for the chat to iterate and read
 	request := OpenRouterRequest{
 		Model:    or.Model,
-		Messages: or.Context,
+		Messages: append(or.Context, msgs...),
 		Stream:   true,
 	}
 	rawReq, err := json.Marshal(&request)
@@ -100,7 +101,10 @@ func (or *OpenRouter) buildScanner(conn *types.BusConnector) (*http.Response, er
 	if err != nil {
 		return nil, err
 	}
-	client := http.Client{}
+	// TODO: Need better management of timeouts overall
+	client := http.Client{
+		Timeout: 60 * time.Second,
+	}
 	hReq.Header.Add("Content-Type", "application/json")
 	hReq.Header.Add("Authorization", fmt.Sprintf("Bearer %s", or.ApiKey))
 	res, err := client.Do(hReq)
@@ -108,6 +112,7 @@ func (or *OpenRouter) buildScanner(conn *types.BusConnector) (*http.Response, er
 		return nil, err
 	}
 	if res.StatusCode != http.StatusOK {
+		res.Body.Close()
 		return nil, fmt.Errorf("OpenRouter API returned status %d", res.StatusCode)
 	}
 	return res, nil
@@ -116,8 +121,7 @@ func (or *OpenRouter) buildScanner(conn *types.BusConnector) (*http.Response, er
 func (or *OpenRouter) Chat(conn *types.BusConnector) {
 	// Handles Streaming LLM responses and forwarding to the ChatBus for the UI
 	messages := []OpenRouterMessage{{Role: "user", Content: conn.Request.Prompt}}
-	or.Context = append(or.Context, messages...)
-	res, err := or.buildScanner(conn)
+	res, err := or.buildScanner(conn, messages)
 	if err != nil {
 		conn.ErrorChan <- err
 		return
@@ -132,6 +136,7 @@ func (or *OpenRouter) Chat(conn *types.BusConnector) {
 			if data == "[DONE]" {
 				messages = append(messages, OpenRouterMessage{Role: "assistant", Content: assistantResponse.String()})
 				or.Context = append(or.Context, messages...)
+				or.logger.Debug("finished chat stream: %v", messages)
 				conn.DoneChannel <- true
 				return
 			}
