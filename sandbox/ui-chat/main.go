@@ -33,7 +33,7 @@ func main() {
 	if len(args) > 1 {
 		model = args[1]
 	} else {
-		model = "llama3.2"
+		model = "x-ai/grok-4-fast:free"
 	}
 	p := tea.NewProgram(initialModel(model), tea.WithAltScreen())
 
@@ -70,6 +70,7 @@ type model struct {
 	ByteReader        chan *types.ChatResponse
 	currentAIResponse string
 	modelProvider     *types.ProviderService
+	modelName         string
 	logger            *logger.Logger
 	renderer          *glamour.TermRenderer
 }
@@ -108,8 +109,14 @@ Type a message and press Enter to send.`)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
-	ollama := models.NewOllamaProvider(logger, m)
-	modelProvider := types.NewProviderService(ollama)
+	// ollama := models.NewOllamaProvider(logger, m)
+	// modelProvider := types.NewProviderService(ollama)
+	// TODO: Need to make this part dynamic depending on env or select
+	openRouter, err := models.NewOpenRouter(logger, m)
+	if err != nil {
+		logger.Fatal("failed to initialize openRouter", "error", err)
+	}
+	modelProvider := types.NewProviderService(openRouter)
 	bus := chat.NewChatBus(logger, modelProvider)
 	bReader := make(chan *types.ChatResponse, 100)
 	renderer, _ := glamour.NewTermRenderer(
@@ -130,6 +137,7 @@ Type a message and press Enter to send.`)
 		logger:        logger,
 		renderer:      renderer,
 		modelProvider: modelProvider,
+		modelName:     m,
 	}
 }
 
@@ -149,7 +157,7 @@ func formatMessage(sender, content string, style lipgloss.Style) string {
 func setAIResponse(m *model, msg *types.ChatResponse) {
 	m.currentAIResponse += msg.Response
 	renderedText, _ := m.renderer.Render(m.currentAIResponse)
-	allMessages := append(m.messages, formatMessage("Ollama", renderedText, m.aiStyle))
+	allMessages := append(m.messages, formatMessage(m.modelName, renderedText, m.aiStyle))
 	m.viewport.SetContent(
 		lipgloss.NewStyle().Width(
 			m.viewport.Width).Render(
@@ -192,7 +200,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, waitForChatResponse(m.ByteReader)
 		} else {
 			renderedtext, _ := m.renderer.Render(m.currentAIResponse)
-			m.messages = append(m.messages, formatMessage("Ollama", renderedtext, m.aiStyle))
+			m.messages = append(m.messages, formatMessage(m.modelName, renderedtext, m.aiStyle))
 			m.currentAIResponse = ""
 			m.viewport.SetContent(lipgloss.NewStyle().Width(
 				m.viewport.Width).Render(
