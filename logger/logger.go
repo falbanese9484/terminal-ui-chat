@@ -25,7 +25,7 @@ func NewSafeLogger(fileOnly bool) (*Logger, error) {
 	if logFilePath == "" {
 		return nil, FilePathNotSet
 	}
-	filePath := fmt.Sprintf("app-%v.log", time.Now().Nanosecond())
+	filePath := fmt.Sprintf("app-%v.log", time.Now().UnixNano())
 	absPath, err := filepath.Abs(logFilePath + filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve absolute path of log file: %w", err)
@@ -63,7 +63,9 @@ func (l *Logger) Debug(msg string, args ...any) {
 	if !l.FileOnly {
 		l.info.Debug(msg, args...)
 	}
-	l.file.Debug(msg, args...)
+	if os.Getenv("DEBUG") == "1" {
+		l.file.Debug(msg, args...)
+	}
 }
 
 func (l *Logger) Info(msg string, args ...any) {
