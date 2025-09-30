@@ -1,4 +1,5 @@
 # bash-butler
+ <pre style="color: #75baff; font-weight: bold;">
  __                        __                __               __    ___                   
 /\ \                      /\ \              /\ \             /\ \__/\_ \                  
 \ \ \____     __      ____\ \ \___          \ \ \____  __  __\ \ ,_\//\ \      __   _ __  
@@ -6,7 +7,7 @@
   \ \ \L\ \/\ \L\.\_/\__, `\\ \ \ \ \/\______\\ \ \L\ \ \ \_\ \\ \ \_ \_\ \_/\  __/\ \ \/ 
    \ \_,__/\ \__/.\_\/\____/ \ \_\ \_\/______/ \ \_,__/\ \____/ \ \__\/\____\ \____\\ \_\ 
     \/___/  \/__/\/_/\/___/   \/_/\/_/          \/___/  \/___/   \/__/\/____/\/____/ \/_/ 
-
+</pre>
 
 UI for chatting with LLM models in the terminal.
 Purpose of this build is to familiarize myself with the bubbletea TUI framework.
