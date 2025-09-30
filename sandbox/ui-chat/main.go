@@ -25,8 +25,13 @@ import (
 
 const gap = "\n\n"
 
-// main starts and runs the Bubble Tea-based chat TUI.
-// It creates a program with the initial model using the alternate screen and logs a fatal error if the program fails to run.
+/*
+This is the main Event Loop for the TUI. It handles initializing a model provider and routing messages to
+and from the user.
+
+NOTE: I need to start thinking about UI enhancements, Error Events displayed to the user and
+figure out how I'm going to give the user options around the provider and model.
+*/
 func main() {
 	args := os.Args
 	var model string

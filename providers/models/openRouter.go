@@ -15,6 +15,12 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
+/*
+This is the first iteration of the OpenRouter spec.
+
+NOTE: Eventually I will need to revist Context logic, possibly making it thread safe
+*/
+
 const ORApiURL = "https://openrouter.ai/api/v1/chat/completions"
 
 type OpenRouter struct {
@@ -40,6 +46,8 @@ func NewOpenRouter(logger *logger.Logger, model string) (*OpenRouter, error) {
 }
 
 func (or *OpenRouter) GenerateRequest(prompt string) *types.ChatRequest {
+	// Generates the request the way that the Frontend UI expects.
+	// TODO: It would be better to remove this requirement and have each provider only accept the prompt
 	return &types.ChatRequest{
 		Model:  or.Model,
 		Prompt: prompt,
@@ -48,17 +56,20 @@ func (or *OpenRouter) GenerateRequest(prompt string) *types.ChatRequest {
 }
 
 type OpenRouterMessage struct {
+	// Used to save context in the form of messages. User or Assistant
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
 type OpenRouterRequest struct {
+	// Request Structure unique to OpenRouter
 	Model    string              `json:"model"`
 	Messages []OpenRouterMessage `json:"messages"`
 	Stream   bool                `json:"stream"`
 }
 
 type OpenRouterStreamResponse struct {
+	// OpenRouter Specific Response
 	ID      string `json:"id"`
 	Object  string `json:"object"`
 	Created int64  `json:"created"`
@@ -73,52 +84,54 @@ type OpenRouterStreamResponse struct {
 	} `json:"choices"`
 }
 
-func (or *OpenRouter) Chat(conn *types.BusConnector) {
-	messages := append(or.Context, OpenRouterMessage{Role: "user", Content: conn.Request.Prompt})
+func (or *OpenRouter) buildScanner(conn *types.BusConnector) (*http.Response, error) {
+	// Builds the *bufio.Scanner for the chat to iterate and read
 	request := OpenRouterRequest{
 		Model:    or.Model,
-		Messages: messages,
+		Messages: or.Context,
 		Stream:   true,
 	}
 	rawReq, err := json.Marshal(&request)
 	if err != nil {
-		conn.ErrorChan <- err
-		return
+		return nil, err
 	}
 	dataReader := bytes.NewReader(rawReq)
 	hReq, err := http.NewRequestWithContext(conn.Ctx, "POST", or.URL, dataReader)
 	if err != nil {
-		conn.ErrorChan <- err
-		return
+		return nil, err
 	}
-	var assistantResponse strings.Builder
 	client := http.Client{}
 	hReq.Header.Add("Content-Type", "application/json")
 	hReq.Header.Add("Authorization", fmt.Sprintf("Bearer %s", or.ApiKey))
 	res, err := client.Do(hReq)
 	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("OpenRouter API returned status %d", res.StatusCode)
+	}
+	return res, nil
+}
+
+func (or *OpenRouter) Chat(conn *types.BusConnector) {
+	// Handles Streaming LLM responses and forwarding to the ChatBus for the UI
+	messages := []OpenRouterMessage{{Role: "user", Content: conn.Request.Prompt}}
+	or.Context = append(or.Context, messages...)
+	res, err := or.buildScanner(conn)
+	if err != nil {
 		conn.ErrorChan <- err
 		return
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		conn.ErrorChan <- fmt.Errorf("OpenRouter API returned status %d", res.StatusCode)
-		return
-	}
-	or.Context = append(or.Context, OpenRouterMessage{
-		Role:    "user",
-		Content: conn.Request.Prompt,
-	})
 	scanner := bufio.NewScanner(res.Body)
+	var assistantResponse strings.Builder
 	for scanner.Scan() {
 		line := scanner.Text()
 		if len(line) > 6 && line[:6] == "data: " {
 			data := line[6:]
 			if data == "[DONE]" {
-				or.Context = append(or.Context, OpenRouterMessage{
-					Role:    "assistant",
-					Content: assistantResponse.String(),
-				})
+				messages = append(messages, OpenRouterMessage{Role: "assistant", Content: assistantResponse.String()})
+				or.Context = append(or.Context, messages...)
 				conn.DoneChannel <- true
 				return
 			}
