@@ -12,11 +12,13 @@
 UI for chatting with LLM models in the terminal.
 Purpose of this build is to familiarize myself with the bubbletea TUI framework.
 
+### [Demo](https://s3.us-east-1.amazonaws.com/images.proaistudios.com/bash-butler-demo.mov)
+
 To run:
 ```bash
 export LOG_FILE_PATH=./logs/
 export OPENROUTER_API_KEY=<your OPENROUTER key>
-go run ./sandbox/ui-chat/main.go
+go run ./cmd/bash-butler/main.go
 ```
 
 For Debug mode and more verbose logging:
@@ -32,4 +34,4 @@ The chat supports markdown using charmbracelets glamour library.
 3. Tooling [ ]
 4. Persistant Sessions / Storage / Recall [ ]
 5. Enhanced Debugger Frontend Log Viewer [ ]
-6. UI Frontend Refactor [ ]
+6. UI Frontend Refactor [x]
