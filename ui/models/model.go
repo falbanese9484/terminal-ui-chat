@@ -92,6 +92,9 @@ func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
 	)
+
+	m.InputArea.Textarea, tiCmd = m.InputArea.Textarea.Update(msg)
+	m.ChatView.Viewport, vpCmd = m.ChatView.Viewport.Update(msg)
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleResize(msg)

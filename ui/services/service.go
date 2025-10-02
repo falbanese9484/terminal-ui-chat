@@ -14,3 +14,13 @@ type ChatService struct {
 	ModelName         string
 	Logger            *logger.Logger
 }
+
+func NewChatService(buffersize int, bus *chat.ChatBus, mp *types.ProviderService, model string, logger *logger.Logger) *ChatService {
+	return &ChatService{
+		Bus:           bus,
+		ByteReader:    make(chan *types.ChatResponse, buffersize),
+		ModelProvider: mp,
+		ModelName:     model,
+		Logger:        logger,
+	}
+}
