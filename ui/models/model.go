@@ -17,18 +17,25 @@ import (
 type (
 	chatResponsemsg *types.ChatResponse
 	errMsg          error
+	UIMode          int
 )
 
-const gap = "\n\n"
+const (
+	gap             = "\n\n"
+	ChatMode UIMode = iota
+	ModelSelectMode
+)
 
 type ChatModel struct {
-	InputArea   *components.InputArea
-	ChatView    *components.ChatView
-	DebugView   *components.DebugWindow
-	ChatService *services.ChatService
-	Logger      *logger.Logger
-	Renderer    *glamour.TermRenderer
-	Err         error
+	InputArea     *components.InputArea
+	ChatView      *components.ChatView
+	DebugView     *components.DebugWindow
+	ModelSelector *components.ModelSelector
+	ChatService   *services.ChatService
+	Logger        *logger.Logger
+	Renderer      *glamour.TermRenderer
+	Err           error
+	Mode          UIMode
 }
 
 func (m ChatModel) Init() tea.Cmd {
@@ -73,8 +80,21 @@ func (m ChatModel) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 func (m ChatModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC, tea.KeyEscape:
+		if m.Mode == ModelSelectMode {
+			m.ModelSelector.Toggle()
+			m.Mode = ChatMode
+			return m, nil
+		}
 		fmt.Println(m.InputArea.Textarea.Value())
 		return m, tea.Quit
+		//	case tea.KeyCtrlM:
+		//		m.ModelSelector.Toggle()
+		//		if m.ModelSelector.ShowSelector {
+		//			m.Mode = ModelSelectMode
+		//		} else {
+		//			m.Mode = ChatMode
+		//		}
+		//		return m, nil //TODO: Key binding issue - cant use ctrlM and Enter in the same statement
 	case tea.KeyEnter:
 		prompt := m.InputArea.Textarea.Value()
 		m.ChatView.Messages = append(m.ChatView.Messages, styles.UserStyle.Render("You: ")+prompt)

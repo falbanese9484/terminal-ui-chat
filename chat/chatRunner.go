@@ -9,9 +9,8 @@ import (
 
 type ChatBus struct {
 	// This Bus is going to be used to feed messages to the TUI event loop
-	Done    chan bool
-	Content chan *types.ChatResponse
-	// NOTE: ChatResponse will need to be able to take in different response specs.
+	Done          chan bool
+	Content       chan *types.ChatResponse
 	Error         chan error
 	modelProvider *types.ProviderService
 	logger        *logger.Logger
@@ -49,5 +48,11 @@ func (cb *ChatBus) Start(byteReader chan *types.ChatResponse) {
 
 func (cb *ChatBus) RunChat(request *types.ChatRequest) {
 	ctx := context.Background()
-	cb.modelProvider.Chat(&types.BusConnector{Ctx: ctx, Request: request, ResponseChan: cb.Content, ErrorChan: cb.Error, DoneChannel: cb.Done})
+	cb.modelProvider.Chat(&types.BusConnector{
+		Ctx:          ctx,
+		Request:      request,
+		ResponseChan: cb.Content,
+		ErrorChan:    cb.Error,
+		DoneChannel:  cb.Done,
+	})
 }

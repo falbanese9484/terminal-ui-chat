@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -16,39 +17,37 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
-/*
-This is the first iteration of the OpenRouter spec.
-
-NOTE: Eventually I will need to revist Context logic, possibly making it thread safe
-*/
-
-const ORApiURL = "https://openrouter.ai/api/v1/chat/completions"
+const (
+	ORApiURL     = "https://openrouter.ai/api/v1/chat/completions"
+	ORRefreshURL = "https://openrouter.ai/api/v1/models"
+)
 
 type OpenRouter struct {
-	URL     string
-	ApiKey  string
-	Model   string
-	Context []OpenRouterMessage
-	logger  *logger.Logger
+	URL            string
+	ApiKey         string
+	ModelRefresher *types.ModelRefresher
+	Model          string
+	Context        []OpenRouterMessage
+	logger         *logger.Logger
 }
 
-func NewOpenRouter(logger *logger.Logger, model string) (*OpenRouter, error) {
+func NewOpenRouter(logger *logger.Logger, model string, mf *types.ModelRefresher) (*OpenRouter, error) {
 	APIKEY := os.Getenv("OPENROUTER_API_KEY")
 	if APIKEY == "" {
 		return nil, errors.New("OPENROUTER_API_KEY is required")
 	}
 
 	return &OpenRouter{
-		URL:    ORApiURL,
-		ApiKey: APIKEY,
-		Model:  model,
-		logger: logger,
+		URL:            ORApiURL,
+		ApiKey:         APIKEY,
+		Model:          model,
+		logger:         logger,
+		ModelRefresher: mf,
 	}, nil
 }
 
 func (or *OpenRouter) GenerateRequest(prompt string) *types.ChatRequest {
 	// Generates the request the way that the Frontend UI expects.
-	// TODO: It would be better to remove this requirement and have each provider only accept the prompt
 	return &types.ChatRequest{
 		Model:  or.Model,
 		Prompt: prompt,
@@ -62,30 +61,9 @@ type OpenRouterMessage struct {
 	Content string `json:"content"`
 }
 
-type OpenRouterRequest struct {
-	// Request Structure unique to OpenRouter
-	Model    string              `json:"model"`
-	Messages []OpenRouterMessage `json:"messages"`
-	Stream   bool                `json:"stream"`
-}
-
-type OpenRouterStreamResponse struct {
-	// OpenRouter Specific Response
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index int `json:"index"`
-		Delta struct {
-			Content string `json:"content,omitempty"`
-			Role    string `json:"role,omitempty"`
-		} `json:"delta"`
-		FinishReason *string `json:"finish_reason"`
-	} `json:"choices"`
-}
-
-func (or *OpenRouter) buildScanner(conn *types.BusConnector, msgs []OpenRouterMessage) (*http.Response, error) {
+func (or *OpenRouter) buildScanner(conn *types.BusConnector,
+	msgs []OpenRouterMessage,
+) (*http.Response, error) {
 	// Builds the *bufio.Scanner for the chat to iterate and read
 	request := OpenRouterRequest{
 		Model:    or.Model,
@@ -134,7 +112,10 @@ func (or *OpenRouter) Chat(conn *types.BusConnector) {
 		if len(line) > 6 && line[:6] == "data: " {
 			data := line[6:]
 			if data == "[DONE]" {
-				messages = append(messages, OpenRouterMessage{Role: "assistant", Content: assistantResponse.String()})
+				messages = append(messages, OpenRouterMessage{
+					Role:    "assistant",
+					Content: assistantResponse.String(),
+				})
 				or.Context = append(or.Context, messages...)
 				or.logger.Debug("finished chat stream: %v", messages)
 				conn.DoneChannel <- true
@@ -159,4 +140,45 @@ func (or *OpenRouter) Chat(conn *types.BusConnector) {
 		conn.ErrorChan <- err
 		return
 	}
+}
+
+func (or *OpenRouter) RetrieveModels() ([]types.Model, error) {
+	if !or.ModelRefresher.IsStale() {
+		return or.ModelRefresher.RetrieveModels(), nil
+	}
+	req, err := http.NewRequest("GET", ORRefreshURL, nil) // TODO: Needs some kind of context
+	if err != nil {
+		return nil, err
+	}
+	client := http.Client{}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		res.Body.Close()
+		return nil, fmt.Errorf("request to retrieve models failed with status: %d", res.StatusCode)
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var response OpenRouterModelsResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	modelsList := []types.Model{}
+	for _, v := range response.Data {
+		newM := types.Model{
+			Name: v.ID,
+		}
+		modelsList = append(modelsList, newM)
+	}
+	if err := or.ModelRefresher.StashModels(modelsList); err != nil {
+		or.logger.Error("failed to cache models!", "error", err)
+		return modelsList, nil
+	}
+	return modelsList, nil
 }

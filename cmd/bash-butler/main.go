@@ -53,8 +53,11 @@ func initialModel(modelName string) tea.Model {
 		glamour.WithWordWrap(80),
 	)
 
+	// initialize the ModelRefresher
+	modelRefresher := types.NewModelRefresher(1800)
+
 	// Initialize provider
-	openRouter, err := models.NewOpenRouter(logger, modelName)
+	openRouter, err := models.NewOpenRouter(logger, modelName, modelRefresher)
 	if err != nil {
 		logger.Fatal("failed to initialize openRouter", "error", err)
 	}
