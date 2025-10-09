@@ -5,29 +5,38 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/falbanese9484/terminal-chat/logger"
 	"github.com/falbanese9484/terminal-chat/types"
 )
 
-const ApiURL = "http://localhost:11434/api/generate"
+const (
+	ApiURL     = "http://localhost:11434/api/generate"
+	RefreshURL = "http://localhost:11434/api/tags"
+)
 
 type OllamaProvider struct {
-	Url     string
-	logger  *logger.Logger
-	context []int
-	model   string
+	Url            string
+	logger         *logger.Logger
+	context        []int
+	model          string
+	ModelRefresher *types.ModelRefresher
 }
 
 // NewOllamaProvider creates a new OllamaProvider configured to use ApiURL.
 // The provided logger is attached and the internal context is initialized as an empty slice.
-func NewOllamaProvider(logger *logger.Logger, model string) *OllamaProvider {
+func NewOllamaProvider(logger *logger.Logger,
+	model string,
+	mf *types.ModelRefresher,
+) *OllamaProvider {
 	return &OllamaProvider{
-		Url:     ApiURL,
-		logger:  logger,
-		context: []int{},
-		model:   model,
+		Url:            ApiURL,
+		logger:         logger,
+		context:        []int{},
+		model:          model,
+		ModelRefresher: mf,
 	}
 }
 
@@ -81,4 +90,59 @@ func (op *OllamaProvider) Chat(connector *types.BusConnector) {
 			return
 		}
 	}
+}
+
+type OllamaResponse struct {
+	Models []OllamaModel `json:"models"`
+}
+
+type OllamaModel struct {
+	Name  string `json:"name"`
+	Model string `json:"model"`
+}
+
+func (op *OllamaProvider) RetrieveModels() ([]types.Model, error) {
+	// TODO: Add context timeout
+	if !op.ModelRefresher.IsStale() {
+		return op.ModelRefresher.RetrieveModels(), nil
+	}
+
+	req, err := http.NewRequest("GET", RefreshURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := http.Client{}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var response OllamaResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+
+	modelList := []types.Model{}
+	for _, v := range response.Models {
+		modelList = append(modelList, types.Model{Name: v.Name})
+	}
+
+	if err := op.ModelRefresher.StashModels(modelList); err != nil {
+		op.logger.Error("failed to stash models", "error", err)
+		return modelList, nil
+	}
+
+	return modelList, nil
+}
+
+func (op *OllamaProvider) SetModel(model string) {
+	op.model = model
 }

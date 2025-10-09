@@ -15,7 +15,11 @@ type ChatService struct {
 	Logger            *logger.Logger
 }
 
-func NewChatService(buffersize int, bus *chat.ChatBus, mp *types.ProviderService, model string, logger *logger.Logger) *ChatService {
+func NewChatService(buffersize int,
+	bus *chat.ChatBus,
+	mp *types.ProviderService,
+	model string, logger *logger.Logger,
+) *ChatService {
 	return &ChatService{
 		Bus:           bus,
 		ByteReader:    make(chan *types.ChatResponse, buffersize),
