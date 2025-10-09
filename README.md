@@ -14,6 +14,8 @@ Purpose of this build is to familiarize myself with the bubbletea TUI framework.
 ---
 This application is in development and is not intended for use as a final product.
 
+### [Demo](https://s3.us-east-1.amazonaws.com/images.proaistudios.com/bash-butler-demo.mov)
+
 To run:
 ```bash
 export LOG_FILE_PATH=./logs/
