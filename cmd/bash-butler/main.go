@@ -26,7 +26,7 @@ func main() {
 	if len(args) > 1 {
 		modelName = args[1]
 	} else {
-		modelName = "x-ai/grok-4-fast:free"
+		modelName = "llama3.2:latest"
 	}
 	p := tea.NewProgram(initialModel(modelName), tea.WithAltScreen())
 
@@ -39,7 +39,6 @@ func initialModel(modelName string) tea.Model {
 	// Get screen dimensions
 	screenWidth, _, _ := term.GetSize(0)
 	mainWidth := screenWidth * 2 / 3
-	debugWidth := screenWidth/3 - 4
 
 	// Initialize logger
 	logger, err := logger.NewSafeLogger(true)
@@ -53,12 +52,16 @@ func initialModel(modelName string) tea.Model {
 		glamour.WithWordWrap(80),
 	)
 
+	// initialize the ModelRefresher
+	modelRefresher := types.NewModelRefresher(3600)
+
 	// Initialize provider
-	openRouter, err := models.NewOpenRouter(logger, modelName)
-	if err != nil {
-		logger.Fatal("failed to initialize openRouter", "error", err)
-	}
-	modelProvider := types.NewProviderService(openRouter)
+	// openRouter, err := models.NewOpenRouter(logger, modelName, modelRefresher)
+	ollama := models.NewOllamaProvider(logger, modelName, modelRefresher)
+	//if err != nil {
+	//	logger.Fatal("failed to initialize openRouter", "error", err)
+	//}
+	modelProvider := types.NewProviderService(ollama)
 
 	// Initialize chat bus and response channel
 	bus := chat.NewChatBus(logger, modelProvider)
@@ -77,7 +80,7 @@ func initialModel(modelName string) tea.Model {
 	// Create UI components
 	inputArea := components.NewInputArea(renderer)
 	chatView := components.NewChatView(mainWidth, screenWidth/2, renderer)
-	debugView := components.NewDebugWindow(debugWidth, screenWidth/2, os.Getenv("DEBUG") == "1", renderer)
+	modelSelector := components.NewModelSelector(mainWidth, screenWidth/8, renderer, logger)
 
 	// Initialize chatView with logo and connection message
 	logoContent := styles.LogoStyle.Render(ui.LOGO) + styles.TitleStyle.Render(ui.PHRASE) + "\n" +
@@ -89,12 +92,12 @@ func initialModel(modelName string) tea.Model {
 
 	// Create and return the chat model
 	return &uiModels.ChatModel{
-		InputArea:   inputArea,
-		ChatView:    chatView,
-		DebugView:   debugView,
-		ChatService: chatService,
-		Logger:      logger,
-		Renderer:    renderer,
-		Err:         nil,
+		InputArea:     inputArea,
+		ChatView:      chatView,
+		ChatService:   chatService,
+		Logger:        logger,
+		Renderer:      renderer,
+		Err:           nil,
+		ModelSelector: modelSelector,
 	}
 }
