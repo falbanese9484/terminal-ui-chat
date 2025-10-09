@@ -80,7 +80,7 @@ func initialModel(modelName string) tea.Model {
 	// Create UI components
 	inputArea := components.NewInputArea(renderer)
 	chatView := components.NewChatView(mainWidth, screenWidth/2, renderer)
-	modelSelector := components.NewModelSelector(mainWidth, screenWidth/4, renderer, logger)
+	modelSelector := components.NewModelSelector(mainWidth, screenWidth/8, renderer, logger)
 
 	// Initialize chatView with logo and connection message
 	logoContent := styles.LogoStyle.Render(ui.LOGO) + styles.TitleStyle.Render(ui.PHRASE) + "\n" +

@@ -11,13 +11,19 @@
 
 UI for chatting with LLM models in the terminal.
 Purpose of this build is to familiarize myself with the bubbletea TUI framework.
+---
+This application is in development and is not intended for use as a final product.
 
 To run:
 ```bash
 export LOG_FILE_PATH=./logs/
 export OPENROUTER_API_KEY=<your OPENROUTER key>
-go run ./sandbox/ui-chat/main.go
+go run ./cmd/bash-butler/main.go
 ```
+---
+
+Right not the app will load ollama, and you would need to change the main.go file to 
+initialize the open router provider - which is commented out.
 
 For Debug mode and more verbose logging:
 ```bash
@@ -26,10 +32,5 @@ export DEBUG=1
 
 The chat supports markdown using charmbracelets glamour library.
 
-### Current Ideas for Steps Forward
-1. Configure OpenRouter [x]
-2. Selectable Models [ ]
-3. Tooling [ ]
-4. Persistant Sessions / Storage / Recall [ ]
-5. Enhanced Debugger Frontend Log Viewer [ ]
-6. UI Frontend Refactor [ ]
+You can toggle between different available models for each provider using the 
+Ctrl+F key.
