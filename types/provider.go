@@ -6,6 +6,8 @@ type Provider interface {
 	// and streaming that may be provider specific.
 	Chat(c *BusConnector)
 	GenerateRequest(prompt string) *ChatRequest
+	RetrieveModels() ([]Model, error)
+	SetModel(model string)
 }
 
 type ProviderService struct {
@@ -25,4 +27,12 @@ func (ps *ProviderService) Chat(c *BusConnector) {
 
 func (ps *ProviderService) GenerateRequest(prompt string) *ChatRequest {
 	return ps.modelProvider.GenerateRequest(prompt)
+}
+
+func (ps *ProviderService) RetrieveModels() ([]Model, error) {
+	return ps.modelProvider.RetrieveModels()
+}
+
+func (ps *ProviderService) SetModel(model string) {
+	ps.modelProvider.SetModel(model)
 }

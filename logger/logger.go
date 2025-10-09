@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -25,7 +24,7 @@ func NewSafeLogger(fileOnly bool) (*Logger, error) {
 	if logFilePath == "" {
 		return nil, FilePathNotSet
 	}
-	filePath := fmt.Sprintf("app-%v.log", time.Now().UnixNano())
+	filePath := fmt.Sprintf("app.log")
 	absPath, err := filepath.Abs(logFilePath + filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve absolute path of log file: %w", err)

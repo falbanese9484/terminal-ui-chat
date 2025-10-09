@@ -182,3 +182,7 @@ func (or *OpenRouter) RetrieveModels() ([]types.Model, error) {
 	}
 	return modelsList, nil
 }
+
+func (or *OpenRouter) SetModel(model string) {
+	or.Model = model
+}

@@ -29,7 +29,6 @@ const (
 type ChatModel struct {
 	InputArea     *components.InputArea
 	ChatView      *components.ChatView
-	DebugView     *components.DebugWindow
 	ModelSelector *components.ModelSelector
 	ChatService   *services.ChatService
 	Logger        *logger.Logger
@@ -55,6 +54,7 @@ func (m ChatModel) handleChatResponse(msg chatResponsemsg) (tea.Model, tea.Cmd) 
 	} else {
 		renderedText, _ := m.Renderer.Render(m.ChatService.CurrentAIResponse)
 		m.ChatView.Messages = append(m.ChatView.Messages, formatMessage(m.ChatService.ModelName, renderedText, styles.AiStyle))
+		m.ChatService.CurrentAIResponse = ""
 		m.ChatView.Set()
 	}
 	return m, nil
@@ -67,9 +67,6 @@ func (m ChatModel) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.ChatView.Viewport.Width = mainWidth
 	m.InputArea.Textarea.SetWidth(mainWidth)
 	m.ChatView.Viewport.Height = msg.Height - m.InputArea.Textarea.Height() - lipgloss.Height(gap)
-
-	m.DebugView.Viewport.Width = debugWidth
-	m.DebugView.Viewport.Height = msg.Height
 
 	if len(m.ChatView.Messages) > 0 {
 		m.ChatView.Set()
@@ -87,14 +84,6 @@ func (m ChatModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		fmt.Println(m.InputArea.Textarea.Value())
 		return m, tea.Quit
-		//	case tea.KeyCtrlM:
-		//		m.ModelSelector.Toggle()
-		//		if m.ModelSelector.ShowSelector {
-		//			m.Mode = ModelSelectMode
-		//		} else {
-		//			m.Mode = ChatMode
-		//		}
-		//		return m, nil //TODO: Key binding issue - cant use ctrlM and Enter in the same statement
 	case tea.KeyEnter:
 		prompt := m.InputArea.Textarea.Value()
 		m.ChatView.Messages = append(m.ChatView.Messages, styles.UserStyle.Render("You: ")+prompt)
@@ -103,11 +92,25 @@ func (m ChatModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		request := m.ChatService.ModelProvider.GenerateRequest(prompt)
 		go m.ChatService.Bus.RunChat(request)
 		return m, waitForChatResponse(m.ChatService.ByteReader)
+	case tea.KeyCtrlF:
+		m.Mode = ModelSelectMode
+		models, err := m.ChatService.ModelProvider.RetrieveModels()
+		if err != nil {
+			m.Logger.Error("failed to load models..", "error", err)
+		}
+		m.ModelSelector.SetModels(models)
+		m.ModelSelector.Toggle()
 	}
 	return m, nil
 }
 
 func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.Mode == ModelSelectMode {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			cmd := m.ModelSelector.Update(msg)
+			return m, cmd
+		}
+	}
 	var (
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
@@ -126,27 +129,32 @@ func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Err = msg
 		m.Logger.Debug("UI:frontend error", "error", m.Err)
 		return m, nil
+	case components.ModelSelectedMsg:
+		m.ChatService.ModelName = msg.Name
+		m.ChatService.ModelProvider.SetModel(msg.Name)
+		confirmationMsg := fmt.Sprintf("Switched to Model: %s", msg.Name)
+		m.ChatView.Messages = append(m.ChatView.Messages, formatMessage("System", confirmationMsg, styles.AiStyle))
+		m.ChatView.Set()
+
+		m.Mode = ChatMode
+		return m, nil
+	case components.ModelSelectorCancelMsg:
+		m.Mode = ChatMode
+		return m, nil
 	}
 
 	return m, tea.Batch(tiCmd, vpCmd)
 }
 
 func (m ChatModel) View() string {
+	if m.Mode == ModelSelectMode {
+		return m.ModelSelector.View()
+	}
 	mainContent := fmt.Sprintf(
 		"%s%s%s",
 		m.ChatView.Viewport.View(),
 		gap,
 		m.InputArea.Textarea.View(),
 	)
-
-	if m.DebugView.ShowDebug {
-		m.DebugView.Viewport.Height = lipgloss.Height(mainContent)
-		return lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			mainContent,
-			m.DebugView.Viewport.View(),
-		)
-	}
-
 	return mainContent
 }

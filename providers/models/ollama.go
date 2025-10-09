@@ -139,3 +139,7 @@ func (op *OllamaProvider) RetrieveModels() ([]types.Model, error) {
 
 	return modelList, nil
 }
+
+func (op *OllamaProvider) SetModel(model string) {
+	op.model = model
+}

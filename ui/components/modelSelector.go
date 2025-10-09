@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/falbanese9484/terminal-chat/logger"
 	"github.com/falbanese9484/terminal-chat/types"
 )
 
@@ -20,7 +21,7 @@ var defaultKeyMap = keyMap{
 		key.WithHelp("enter", "select model"),
 	),
 	Cancel: key.NewBinding(
-		key.WithKeys("esc"),
+		key.WithKeys("esc", "q"),
 		key.WithHelp("esc", "cancel"),
 	),
 }
@@ -29,7 +30,15 @@ type ModelItem struct {
 	Name string
 }
 
+type ModelSelectorCancelMsg struct{}
+
+func (m ModelItem) Title() string       { return m.Name }
+func (m ModelItem) Description() string { return "" }
 func (m ModelItem) FilterValue() string { return m.Name }
+
+type ModelSelectedMsg struct {
+	Name string
+}
 
 type ModelSelector struct {
 	List         list.Model
@@ -39,9 +48,10 @@ type ModelSelector struct {
 	Width        int
 	Height       int
 	renderer     *glamour.TermRenderer
+	logger       *logger.Logger
 }
 
-func NewModelSelector(width, height int, renderer *glamour.TermRenderer) *ModelSelector {
+func NewModelSelector(width, height int, renderer *glamour.TermRenderer, logger *logger.Logger) *ModelSelector {
 	listModel := list.New([]list.Item{}, list.NewDefaultDelegate(), width, height)
 	listModel.Title = "Select a Model"
 	listModel.SetShowHelp(true)
@@ -53,6 +63,7 @@ func NewModelSelector(width, height int, renderer *glamour.TermRenderer) *ModelS
 		Width:        width,
 		Height:       height,
 		renderer:     renderer,
+		logger:       logger,
 	}
 }
 
@@ -66,6 +77,7 @@ func (ms *ModelSelector) SetModels(models []types.Model) {
 	}
 
 	ms.List.SetItems(items)
+	ms.logger.Info("Set models successfully", "items", items)
 }
 
 func (ms *ModelSelector) Update(msg tea.Msg) tea.Cmd {
@@ -73,26 +85,31 @@ func (ms *ModelSelector) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 
+	// Process the message with the list first, to allow it to handle navigation
 	var cmd tea.Cmd
+	ms.List, cmd = ms.List.Update(msg)
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		// HandleKeyPress
+	// Then handle special cases like Enter and Escape
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		ms.logger.Debug("ModelSelector key pressed", "key", keyMsg.String())
+
 		switch {
-		case key.Matches(msg, defaultKeyMap.Select):
+		case key.Matches(keyMsg, defaultKeyMap.Select):
 			if i, ok := ms.List.SelectedItem().(ModelItem); ok {
 				ms.Selected = i.Name
 				ms.ShowSelector = false
-				return nil
+				return func() tea.Msg {
+					return ModelSelectedMsg{Name: i.Name}
+				}
 			}
-		case key.Matches(msg, defaultKeyMap.Cancel):
-			// Cancel Selection
+		case key.Matches(keyMsg, defaultKeyMap.Cancel):
 			ms.ShowSelector = false
-			return nil
+			return func() tea.Msg {
+				return ModelSelectorCancelMsg{}
+			}
 		}
 	}
 
-	ms.List, cmd = ms.List.Update(msg)
 	return cmd
 }
 
@@ -117,8 +134,7 @@ func (ms *ModelSelector) View() string {
 func (ms *ModelSelector) Toggle() {
 	ms.ShowSelector = !ms.ShowSelector
 
-	// When showing the selector, ensure the list has focus
 	if ms.ShowSelector {
-		// You might want to refresh models here or in the caller
+		ms.List.ResetSelected()
 	}
 }
