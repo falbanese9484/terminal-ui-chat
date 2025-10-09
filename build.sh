@@ -16,8 +16,9 @@ chmod +x "$INSTALL_DIR/bash-butler"
 echo "Binary moved to: $INSTALL_DIR"
 
 # Add to PATH if not already added
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+if [[ ":$PATH:" !=  *":$HOME/.bash-butler/bin:"* ]]; then
     echo 'export PATH="$HOME/.bash-butler/bin:$PATH"' >> ~/.bashrc
+    [ -f ~/.zshrc ] && \
     echo 'export PATH="$HOME/.bash-butler/bin:$PATH"' >> ~/.zshrc
     echo "Added $INSTALL_DIR to PATH. Restart your terminal or run:"
     echo "source ~/.bashrc  (or source ~/.zshrc for zsh users)"

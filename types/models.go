@@ -23,9 +23,9 @@ type ModelRefresher struct {
 	LastUpdated time.Time
 }
 
-func NewModelRefresher(refreshTimeMS int64) *ModelRefresher {
+func NewModelRefresher(refreshTimeSeconds int64) *ModelRefresher {
 	return &ModelRefresher{
-		Expiry: time.Duration(refreshTimeMS) * time.Second,
+		Expiry: time.Duration(refreshTimeSeconds) * time.Second,
 		Models: []Model{},
 		Mutex:  sync.RWMutex{},
 	}
@@ -34,8 +34,8 @@ func NewModelRefresher(refreshTimeMS int64) *ModelRefresher {
 func (mf *ModelRefresher) StashModels(models []Model) error {
 	mf.Mutex.Lock()
 	mf.Models = models
-	mf.Mutex.Unlock()
 	mf.LastUpdated = time.Now()
+	mf.Mutex.Unlock()
 	return nil
 }
 
@@ -48,5 +48,8 @@ func (mf *ModelRefresher) RetrieveModels() []Model {
 }
 
 func (mf *ModelRefresher) IsStale() bool {
-	return time.Since(mf.LastUpdated) > mf.Expiry
+	mf.Mutex.RLock()
+	lastUpdated := mf.LastUpdated
+	mf.Mutex.RUnlock()
+	return time.Since(lastUpdated) > mf.Expiry
 }

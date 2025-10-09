@@ -143,6 +143,7 @@ func (or *OpenRouter) Chat(conn *types.BusConnector) {
 }
 
 func (or *OpenRouter) RetrieveModels() ([]types.Model, error) {
+	// TODO: Add context timeout
 	if !or.ModelRefresher.IsStale() {
 		return or.ModelRefresher.RetrieveModels(), nil
 	}

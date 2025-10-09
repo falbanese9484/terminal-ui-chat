@@ -102,6 +102,7 @@ type OllamaModel struct {
 }
 
 func (op *OllamaProvider) RetrieveModels() ([]types.Model, error) {
+	// TODO: Add context timeout
 	if !op.ModelRefresher.IsStale() {
 		return op.ModelRefresher.RetrieveModels(), nil
 	}
@@ -116,6 +117,8 @@ func (op *OllamaProvider) RetrieveModels() ([]types.Model, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
