@@ -36,3 +36,5 @@ The chat supports markdown using charmbracelets glamour library.
 
 You can toggle between different available models for each provider using the 
 Ctrl+F key.
+
+Pushing this for PR
